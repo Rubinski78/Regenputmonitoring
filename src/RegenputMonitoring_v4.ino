@@ -15,9 +15,10 @@
    V3.3   22/10/2017  Ruben Desmet    only send the RAW ADC Value to Node-RED
                                       includes BACKLOG ITEM : [SOFTWARE]            remove the % level calculation from the Arduino to Node-RED
    V3.3.1 24/10/2017  Ruben Desmet    sourcecode opgekuist en TODO's bijgezet
-   V4.0   25/10/2017  Ruben Desmet    decommissioning van de 
+   V4.0   25/10/2017  Ruben Desmet    decommissioning van de
                                       includes BACKLOG ITEM : [SOFTWARE][HARDWARE]  branch a new version without display (progress shown with LEDs)
-   
+   V4.1   4/11/2017   Ruben Desmet    removed "measure_b"
+
   BACKLOG:
   --------
     - [SOFTWARE]            implement WATCHDOG (mail Lieven Dossche 19/10/2017)
@@ -38,7 +39,6 @@ const bool buzzerOnAlarm = true;
 // program variables
 bool measurementAskedFromServer = false;
 bool measurementAskedFromButton = false;
-bool useMethod_b = false;
 
 //constants for pump
 byte PUMP_RELAIS_PIN = 4;
@@ -103,19 +103,19 @@ const int periodDuration = 3000;
 int16_t rawADCvalue;  // The is where we store the value we receive from the ADS1115
 
 void setup() {
-  //Serial.begin (9600);
+  Serial.begin (9600);
 
   measurementAskedFromServer = false;
   measurementAskedFromButton = false;
 
   pinMode(A1, INPUT);
   analogReference(EXTERNAL); // use AREF for reference voltage
-   
+
   //do some analog measurements to calibrate
   analogRead(A1);
   analogRead(A1);
   analogRead(A1);
-  
+
   pinMode(externalLedPin, OUTPUT);
 
   digitalWrite(PUMP_RELAIS_PIN, HIGH);
@@ -180,42 +180,28 @@ void AlarmReset()
   tone(buzzerPin, 1250, 100);
 }
 
-double GetHeightWater(double& volume) 
+double GetHeightWater(double& volume)
 {
     //TODO : masterdata in Node-Red
-    int offset = 30;
-   
+    //int offset = 30;
+
     //Serial.println("Activating pump");
     digitalWrite(PUMP_RELAIS_PIN, LOW);
-     
+
     delay(pump_delay);
-  
-    if (useMethod_b) 
-    {
-      //Serial.print("value from ADC : ");
-      //Serial.println(rawADCvalue);
-      
-      //Serial.println("Deactivating pump");
-      digitalWrite(PUMP_RELAIS_PIN, HIGH);    
 
-      delay(2000);
+    //Serial.print("value from ADC : ");
+    //Serial.println(rawADCvalue);
 
-      rawADCvalue = analogRead(A1);
-    }
-    else
-    {
-      rawADCvalue = analogRead(A1);
-      //Serial.print("value from ADC : ");
-      //Serial.println(rawADCvalue);
+    //Serial.println("Deactivating pump");
+    digitalWrite(PUMP_RELAIS_PIN, HIGH);
 
-      delay(5000);
-      
-      //Serial.println("Deactivating pump");
-      digitalWrite(PUMP_RELAIS_PIN, HIGH); 
-    }
-      
-   rawADCvalue = (rawADCvalue - offset);
-   
+    delay(2000);
+
+    rawADCvalue = analogRead(A1);
+
+   //rawADCvalue = (rawADCvalue - offset);
+
    //5500 = 5.5V = referentievoltage gemeten op huidig gebruikte Arduino
    //4700 = 4.7V = voltage bij full scale van sensor
     double f1 = (5500.0 / 1023) * (50.0 / 4700) * (1000.0 / (9.81*999.58)) + 0.0;   //zonder temperatuurcompensatie want zit eigenlijk al in de sensor
@@ -223,7 +209,7 @@ double GetHeightWater(double& volume)
 
     //2* omdat er 2 putten zijn die met een hevel verbonden zijn
     volume = 2 * (rawADCvalue * f1) * ((3.1415 * 2.35 * 2.35) / 4) * 1000;
-    
+
     return mm;
 }
 
@@ -236,26 +222,16 @@ void udpSerialPrint(word port, byte ip[4], word unknown, const char *data, word 
   if (payload == "heartbeat")
   {
     lastHeartbeatReceivedOn = millis();
-    //Serial.println(measurementAskedFromServer);
   }
   else if (payload == "measure")
   {
-    //Serial.println(measurementAskedFromServer);
     lastHeartbeatReceivedOn = millis();
-    useMethod_b = false;
     measurementAskedFromServer = true;
-    //Serial.print("measure received");
-  }
-  else if (payload == "measure_b")
-  {
-    lastHeartbeatReceivedOn = millis();
-    useMethod_b = true;
-    measurementAskedFromServer = true;
-    //Serial.print("measure_b received");
+    Serial.print("measure received");
   }
   else
   {
-    //Serial.println(payload);
+    Serial.println(payload);
   }
 }
 
@@ -272,12 +248,12 @@ void DeactivateAlarmLight()
 }
 
 void loop() {
-  if (communicate) 
+  if (communicate)
   {
     //while (ether.clientWaitingGw())
     ether.packetLoop(ether.packetReceive());
   }
-  
+
   unsigned long currentMillis = millis();
   if (measurementAskedFromServer || measurementAskedFromButton) {
 
@@ -310,7 +286,7 @@ void loop() {
       paramsStr = paramsStr + F("&adc=");
       paramsStr = paramsStr + rawADCvalue;
       paramsStr = paramsStr + F("&hb=");
-      paramsStr = paramsStr + heartBeatStatusId;       
+      paramsStr = paramsStr + heartBeatStatusId;
       strcpy(msg, paramsStr.c_str());
 
       ether.sendUdp(msg, sizeof msg, listenPort, UDPDataCollectorIp, 8888);
