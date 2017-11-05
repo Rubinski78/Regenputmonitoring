@@ -15,23 +15,35 @@
    V3.3   22/10/2017  Ruben Desmet    only send the RAW ADC Value to Node-RED
                                       includes BACKLOG ITEM : [SOFTWARE]            remove the % level calculation from the Arduino to Node-RED
    V3.3.1 24/10/2017  Ruben Desmet    sourcecode opgekuist en TODO's bijgezet
-   V4.0   25/10/2017  Ruben Desmet    decommissioning van de
+   V4.0   25/10/2017  Ruben Desmet    decommissioning of the LCD display
                                       includes BACKLOG ITEM : [SOFTWARE][HARDWARE]  branch a new version without display (progress shown with LEDs)
    V4.1   4/11/2017   Ruben Desmet    removed "measure_b"
+                                      includes BACKLOG ITEM :  [HARDWARE]            implement a small relais with transistor circuit to recuperate the 4 relay board
+                                      although not transistor has been used since powering the coil only takes 3,6mA
+   V5.0   4/11/2017   Ruben Desmet    decommissioning of the <ethercard.h> lib in favour for the <Ethernet.h> lib
+                                      includes BACKLOG ITEM : [SOFTWARE][HARDWARE]  implement a version with a Arduino UNO by using the Ethershield.h library
 
   BACKLOG:
   --------
     - [SOFTWARE]            implement WATCHDOG (mail Lieven Dossche 19/10/2017)
-
-    - [HARDWARE]            implement a small relais with transistor circuit to recuperate the 4 relay board
-    - [SOFTWARE][HARDWARE]  implement a version with a Arduino UNO by using the Ethershield.h library
     - [SOFTWARE]            remove all masterdata from Arduino into Node-RED
     - [SOFTWARE]            distance and level calculations are now done in the Arduino and in Node-Red
                             It would be better that Node-Red is the master and the display in the garage shows the data
                             that is calculated in Node-Red so that the Arduino doesn't need to calculate any more.
 */
+#include <Ethernet.h>
+#include <SPI.h>
+#include <EthernetUdp.h> // UDP library from: bjoern@cs.stanford.edu 12/30/2008
 
-#include <EtherCard.h>
+
+IPAddress ip(192, 168, 1, 132);
+static byte myMac[] = { 0x74, 0x54, 0x69, 0x2D, 0x30, 0x31 };
+unsigned int localPort = 8888; // local port to listen on
+// buffers for receiving and sending data
+char packetBuffer[UDP_TX_PACKET_MAX_SIZE]; //buffer to hold incoming packet
+
+EthernetUDP Udp;
+
 
 const bool communicate = true;
 const bool buzzerOnAlarm = true;
@@ -62,7 +74,7 @@ const byte alarmResetPin = 6;
 //TODO : masterdata in Node-RED
 const byte lowAlarmLimit = 25;                //if tank reaches <lowAlarmLimit% then give alarm
 //TODO : masterdata in Node-RED
-const byte alarmLightInterval = 1000;
+//const byte alarmLightInterval = 1000;
 //TODO : masterdata in Node-RED
 const unsigned long alarmDelay = 3600000;       //1h
 
@@ -75,9 +87,8 @@ byte resetButtonState = LOW;
 byte lastResetButtonState = LOW;
 unsigned long lastTimeBuzzer = 0;
 
-static byte myMac[] = { 0x74, 0x54, 0x69, 0x2D, 0x30, 0x31 };
-byte UDPDataCollectorIp[] = {192, 168, 1, 130};                     //raspberrypi : this machine gets a fixed adres from the router
-byte Ethernet::buffer[300];
+//byte UDPDataCollectorIp[] = {192, 168, 1, 130};                     //raspberrypi : this machine gets a fixed adres from the router
+//byte Ethernet::buffer[300];
 
 String paramsStr;
 char msg[40];
@@ -105,6 +116,10 @@ int16_t rawADCvalue;  // The is where we store the value we receive from the ADS
 void setup() {
   Serial.begin (9600);
 
+  // start the Ethernet and UDP:
+  Ethernet.begin(myMac, ip);
+  Udp.begin(localPort);
+
   measurementAskedFromServer = false;
   measurementAskedFromButton = false;
 
@@ -129,31 +144,9 @@ void setup() {
    if (communicate)
   {
     heartBeatStatusId = 2;   //2 = waiting for heartbeat
-    int nFirmwareVersion;
-    nFirmwareVersion = ether.begin(sizeof Ethernet::buffer, myMac, 10);
-    if (0 == nFirmwareVersion)
-    {
-      // handle failure to initiate network interface
-      //Serial.println(F("Failed to access Ethernet controller"));
-    }
-    else
-    {
-      //Serial.println(nFirmwareVersion);
-    }
 
-    if (!ether.dhcpSetup())
-    {
-      //Serial.println(F("DHCP failed"));
-    }
-    else
-    {
-      //Serial.println(F("DHCP succeeded"));
-      ether.printIp("My IP: ", ether.myip);
-      ether.printIp("Netmask: ", ether.netmask);
-      ether.printIp("GW IP: ", ether.gwip);
-      ether.printIp("DNS IP: ", ether.dnsip);
-      ether.udpServerListenOnPort(&udpSerialPrint, listenPort);
-    }
+//TODO : ethershield initialisation code
+
   }
   else
   {
@@ -213,27 +206,27 @@ double GetHeightWater(double& volume)
     return mm;
 }
 
-void udpSerialPrint(word port, byte ip[4], word unknown, const char *data, word len) {
-  String payload(data);
-
-  //Serial.println(measurementAskedFromServer);
-  //Serial.println(payload);
-
-  if (payload == "heartbeat")
-  {
-    lastHeartbeatReceivedOn = millis();
-  }
-  else if (payload == "measure")
-  {
-    lastHeartbeatReceivedOn = millis();
-    measurementAskedFromServer = true;
-    Serial.print("measure received");
-  }
-  else
-  {
-    Serial.println(payload);
-  }
-}
+// void udpSerialPrint(word port, byte ip[4], word unknown, const char *data, word len) {
+//   String payload(data);
+//
+//   //Serial.println(measurementAskedFromServer);
+//   //Serial.println(payload);
+//
+//   if (payload == "heartbeat")
+//   {
+//     lastHeartbeatReceivedOn = millis();
+//   }
+//   else if (payload == "measure")
+//   {
+//     lastHeartbeatReceivedOn = millis();
+//     measurementAskedFromServer = true;
+//     Serial.print("measure received");
+//   }
+//   else
+//   {
+//     Serial.println(payload);
+//   }
+// }
 
 void ActivateAlarmLight()
 {
@@ -251,7 +244,48 @@ void loop() {
   if (communicate)
   {
     //while (ether.clientWaitingGw())
-    ether.packetLoop(ether.packetReceive());
+    //ether.packetLoop(ether.packetReceive());
+
+    int packetSize = Udp.parsePacket();
+    if (packetSize)
+    {
+      Serial.print("Received packet of size ");
+      Serial.println(packetSize);
+      Serial.print("From ");
+      IPAddress remote = Udp.remoteIP();
+      for (int i = 0; i < 4; i++) {
+        Serial.print(remote[i], DEC);
+        if (i < 3) {
+          Serial.print(".");
+        }
+      }
+      Serial.print(", port ");
+      Serial.println(Udp.remotePort());
+
+      // read the packet into packetBufffer
+      Udp.read(packetBuffer, UDP_TX_PACKET_MAX_SIZE);
+      Serial.println("Contents:");
+      Serial.println(packetBuffer);
+
+      String payload(packetBuffer);
+      Serial.println(payload);
+
+      if (payload == "heartbeat")
+      {
+        lastHeartbeatReceivedOn = millis();
+      }
+      else if (payload == "measure")
+      {
+        lastHeartbeatReceivedOn = millis();
+        measurementAskedFromServer = true;
+        Serial.print("measure received");
+      }
+      else
+      {
+        Serial.println(payload);
+      }
+    }
+
   }
 
   unsigned long currentMillis = millis();
@@ -264,9 +298,10 @@ void loop() {
 
     digitalWrite(externalLedPin, HIGH);
 
-    double heightWater;
+    //double heightWater;
     double volume;
-    heightWater = GetHeightWater(volume);
+    //heightWater = GetHeightWater(volume);
+    GetHeightWater(volume);
 
     //Serial.println(heightWater);
 
@@ -289,7 +324,11 @@ void loop() {
       paramsStr = paramsStr + heartBeatStatusId;
       strcpy(msg, paramsStr.c_str());
 
-      ether.sendUdp(msg, sizeof msg, listenPort, UDPDataCollectorIp, 8888);
+      //ether.sendUdp(msg, sizeof msg, listenPort, UDPDataCollectorIp, 8888);
+      // send a reply to the IP address and port that sent us the packet we received
+      Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
+      Udp.write(msg);
+      Udp.endPacket();
     }
 
     measurementAskedFromButton = false;
@@ -332,4 +371,6 @@ void loop() {
     else if (millis() - lastTimeBuzzer >= onDuration) DeactivateAlarmLight();
   }
   else DeactivateAlarmLight();
+
+  delay(20);
 }
