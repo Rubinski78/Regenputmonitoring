@@ -116,10 +116,6 @@ int16_t rawADCvalue;  // The is where we store the value we receive from the ADS
 void setup() {
   Serial.begin (9600);
 
-  // start the Ethernet and UDP:
-  Ethernet.begin(myMac, ip);
-  Udp.begin(localPort);
-
   measurementAskedFromServer = false;
   measurementAskedFromButton = false;
 
@@ -144,9 +140,9 @@ void setup() {
    if (communicate)
   {
     heartBeatStatusId = 2;   //2 = waiting for heartbeat
-
-//TODO : ethershield initialisation code
-
+    // start the Ethernet and UDP:
+    Ethernet.begin(myMac, ip);
+    Udp.begin(localPort);
   }
   else
   {
@@ -247,6 +243,7 @@ void loop() {
     //ether.packetLoop(ether.packetReceive());
 
     int packetSize = Udp.parsePacket();
+    //if(Udp.available())
     if (packetSize)
     {
       Serial.print("Received packet of size ");
