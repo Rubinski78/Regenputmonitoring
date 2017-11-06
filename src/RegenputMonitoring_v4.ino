@@ -36,17 +36,16 @@
 #include <EthernetUdp.h> // UDP library from: bjoern@cs.stanford.edu 12/30/2008
 
 
-IPAddress ip(192, 168, 1, 132);
+IPAddress ip(192, 168, 1, 133);
 static byte myMac[] = { 0x74, 0x54, 0x69, 0x2D, 0x30, 0x31 };
-unsigned int localPort = 8888; // local port to listen on
+unsigned int localPort = 8890; // local port to listen on
 // buffers for receiving and sending data
 char packetBuffer[UDP_TX_PACKET_MAX_SIZE]; //buffer to hold incoming packet
 
 EthernetUDP Udp;
 
-
 const bool communicate = true;
-const bool buzzerOnAlarm = true;
+const bool buzzerOnAlarm = false;
 
 // program variables
 bool measurementAskedFromServer = false;
@@ -93,7 +92,7 @@ unsigned long lastTimeBuzzer = 0;
 String paramsStr;
 char msg[40];
 
-const int listenPort = 8890;            // local port to listen on
+//const int listenPort = 8890;            // local port to listen on
 long lastHeartbeatReceivedOn = 0;       // the last time the heartbeat was received from de UDPDataLogger
 //TODO : masterdata in Node-RED
 const long heartBeatDelay = 360000;      //6min
@@ -154,6 +153,8 @@ void setup() {
   measurementAskedFromButton = false;
 
   DeactivateAlarmLight();
+
+  Serial.println("SETUP COMPLETE");
 }
 
 void AlarmReset()
@@ -243,6 +244,10 @@ void loop() {
     //ether.packetLoop(ether.packetReceive());
 
     int packetSize = Udp.parsePacket();
+
+    Serial.print("packetsize = ");
+    Serial.println(packetSize);
+
     //if(Udp.available())
     if (packetSize)
     {
@@ -261,11 +266,11 @@ void loop() {
 
       // read the packet into packetBufffer
       Udp.read(packetBuffer, UDP_TX_PACKET_MAX_SIZE);
-      Serial.println("Contents:");
+      Serial.print("Contents:");
       Serial.println(packetBuffer);
 
       String payload(packetBuffer);
-      Serial.println(payload);
+      //Serial.println(payload);
 
       if (payload == "heartbeat")
       {
@@ -275,7 +280,7 @@ void loop() {
       {
         lastHeartbeatReceivedOn = millis();
         measurementAskedFromServer = true;
-        Serial.print("measure received");
+        Serial.println("measure received");
       }
       else
       {
@@ -284,6 +289,8 @@ void loop() {
     }
 
   }
+
+  Serial.println("START LOOP");
 
   unsigned long currentMillis = millis();
   if (measurementAskedFromServer || measurementAskedFromButton) {
@@ -369,5 +376,7 @@ void loop() {
   }
   else DeactivateAlarmLight();
 
-  delay(20);
+  Serial.println("END LOOP");
+
+  delay(2000);
 }
