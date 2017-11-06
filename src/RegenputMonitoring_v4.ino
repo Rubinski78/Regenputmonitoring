@@ -330,7 +330,7 @@ void loop() {
 
       //ether.sendUdp(msg, sizeof msg, listenPort, UDPDataCollectorIp, 8888);
       // send a reply to the IP address and port that sent us the packet we received
-      Udp.beginPacket(Udp.remoteIP(), Udp.remotePort());
+      Udp.beginPacket(Udp.remoteIP(), 8888);
       Udp.write(msg);
       Udp.endPacket();
     }
