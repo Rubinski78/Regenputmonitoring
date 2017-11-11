@@ -1,5 +1,6 @@
 {
     "board": "arduino:avr:uno",
     "sketch": "src\\RegenputMonitoring\\RegenputMonitoring.ino",
-    "output": "../build"
+    "output": "../build",
+    "port": "COM19"
 }

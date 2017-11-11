@@ -1,3 +1,10 @@
+#include <Dhcp.h>
+#include <Dns.h>
+#include <Ethernet.h>
+#include <EthernetClient.h>
+#include <EthernetServer.h>
+#include <EthernetUdp.h>
+
 /*
   VERSION HISTORY:
   ----------------
@@ -31,12 +38,8 @@
                             It would be better that Node-Red is the master and the display in the garage shows the data
                             that is calculated in Node-Red so that the Arduino doesn't need to calculate any more.
 */
-#include <Ethernet.h>
-#include <SPI.h>
-#include <EthernetUdp.h> // UDP library from: bjoern@cs.stanford.edu 12/30/2008
 
-
-IPAddress ip(192, 168, 1, 133);
+//IPAddress ip(192, 168, 1, 133);
 static byte myMac[] = { 0x74, 0x54, 0x69, 0x2D, 0x30, 0x31 };
 unsigned int localPort = 8890; // local port to listen on
 // buffers for receiving and sending data
@@ -140,7 +143,8 @@ void setup() {
   {
     heartBeatStatusId = 2;   //2 = waiting for heartbeat
     // start the Ethernet and UDP:
-    Ethernet.begin(myMac, ip);
+    //Ethernet.begin(myMac, ip);
+    Ethernet.begin(myMac);
     Udp.begin(localPort);
   }
   else
@@ -203,28 +207,6 @@ double GetHeightWater(double& volume)
     return mm;
 }
 
-// void udpSerialPrint(word port, byte ip[4], word unknown, const char *data, word len) {
-//   String payload(data);
-//
-//   //Serial.println(measurementAskedFromServer);
-//   //Serial.println(payload);
-//
-//   if (payload == "heartbeat")
-//   {
-//     lastHeartbeatReceivedOn = millis();
-//   }
-//   else if (payload == "measure")
-//   {
-//     lastHeartbeatReceivedOn = millis();
-//     measurementAskedFromServer = true;
-//     Serial.print("measure received");
-//   }
-//   else
-//   {
-//     Serial.println(payload);
-//   }
-// }
-
 void ActivateAlarmLight()
 {
   digitalWrite(alarmLightPin, LOW);
@@ -248,8 +230,8 @@ void loop() {
     Serial.print("packetsize = ");
     Serial.println(packetSize);
 
-    //if(Udp.available())
-    if (packetSize)
+    //if (packetSize)
+    if(Udp.available())
     {
       Serial.print("Received packet of size ");
       Serial.println(packetSize);
@@ -271,6 +253,8 @@ void loop() {
 
       String payload(packetBuffer);
       //Serial.println(payload);
+
+      for(int i=0;i<UDP_TX_PACKET_MAX_SIZE;i++) packetBuffer[i] = 0;
 
       if (payload == "heartbeat")
       {
@@ -330,7 +314,8 @@ void loop() {
 
       //ether.sendUdp(msg, sizeof msg, listenPort, UDPDataCollectorIp, 8888);
       // send a reply to the IP address and port that sent us the packet we received
-      Udp.beginPacket(Udp.remoteIP(), 8888);
+      //Udp.beginPacket(Udp.remoteIP(), 8888);
+      Udp.beginPacket("192.168.1.130", 8888);
       Udp.write(msg);
       Udp.endPacket();
     }
