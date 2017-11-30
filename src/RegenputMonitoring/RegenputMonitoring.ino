@@ -29,18 +29,22 @@
                                       although not transistor has been used since powering the coil only takes 3,6mA
    V5.0   4/11/2017   Ruben Desmet    decommissioning of the <ethercard.h> lib in favour for the <Ethernet.h> lib
                                       includes BACKLOG ITEM : [SOFTWARE][HARDWARE]  implement a version with a Arduino UNO by using the Ethershield.h library
+                                      includes BACKLOG ITEM : [SOFTWARE]            distance and level calculations are now done in the Arduino and in Node-Red
+   V5.1   16/11/2017  Ruben Desmet    remove delay statements to prepare for the Watchdog mechanisme
 
   BACKLOG:
   --------
     - [SOFTWARE]            implement WATCHDOG (mail Lieven Dossche 19/10/2017)
     - [SOFTWARE]            remove all masterdata from Arduino into Node-RED
-    - [SOFTWARE]            distance and level calculations are now done in the Arduino and in Node-Red
-                            It would be better that Node-Red is the master and the display in the garage shows the data
+
+  CANCELLED:
+  ---------
+    - [SOFTWARE]            It would be better that Node-Red is the master and the display in the garage shows the data
                             that is calculated in Node-Red so that the Arduino doesn't need to calculate any more.
 */
 
 //IPAddress ip(192, 168, 1, 133);
-static byte myMac[] = { 0x74, 0x54, 0x69, 0x2D, 0x30, 0x31 };
+static byte myMac[] = {0x74, 0x54, 0x69, 0x2D, 0x30, 0x31};
 unsigned int localPort = 8890; // local port to listen on
 // buffers for receiving and sending data
 char packetBuffer[UDP_TX_PACKET_MAX_SIZE]; //buffer to hold incoming packet
@@ -57,34 +61,36 @@ bool measurementAskedFromButton = false;
 //constants for pump
 byte PUMP_RELAIS_PIN = 4;
 //TODO : masterdata in Node-RED
-long pump_delay = 120000;      //ms
+long pump_delay = 120000; //ms
+bool measurementBusy = false;
+long measurementStarted = 0; // time the last measurement was started
 
 // constants/variables for LEDs
-const byte externalLedPin = 13;                         // the number of the external pin (=D4)
+const byte externalLedPin = 13; // the number of the external pin (=D4)
 
 //constants for buttons
-const byte debounceDelay = 50;    // the debounce time; increase if the output flickers
+const byte debounceDelay = 50; // the debounce time; increase if the output flickers
 
 // constants for cistern T1
 //TODO : masterdata in Node-RED
-const int t1_capacity_with_manhole = 20000;  //liters : toch manhole niet meegerekend
+const int t1_capacity_with_manhole = 20000; //liters : toch manhole niet meegerekend
 
 // alarm light and reset button
 const byte alarmLightPin = 8;
 const byte alarmResetPin = 6;
 
 //TODO : masterdata in Node-RED
-const byte lowAlarmLimit = 25;                //if tank reaches <lowAlarmLimit% then give alarm
+const byte lowAlarmLimit = 25; //if tank reaches <lowAlarmLimit% then give alarm
 //TODO : masterdata in Node-RED
 //const byte alarmLightInterval = 1000;
 //TODO : masterdata in Node-RED
-const unsigned long alarmDelay = 3600000;       //1h
+const unsigned long alarmDelay = 3600000; //1h
 
 boolean alarmLightIsActive = false;
 unsigned long previousMillisAlarm = 0;
 boolean alarmIsActive = false;
 unsigned long lastMillisAlarmAcked = 0;
-long lastResetButtonDebounceTime = 0;  // the last time the output pin was toggled
+long lastResetButtonDebounceTime = 0; // the last time the output pin was toggled
 byte resetButtonState = LOW;
 byte lastResetButtonState = LOW;
 unsigned long lastTimeBuzzer = 0;
@@ -96,9 +102,9 @@ String paramsStr;
 char msg[40];
 
 //const int listenPort = 8890;            // local port to listen on
-long lastHeartbeatReceivedOn = 0;       // the last time the heartbeat was received from de UDPDataLogger
+long lastHeartbeatReceivedOn = 0; // the last time the heartbeat was received from de UDPDataLogger
 //TODO : masterdata in Node-RED
-const long heartBeatDelay = 360000;      //6min
+const long heartBeatDelay = 360000; //6min
 
 byte heartBeatStatusId = 2;
 //0 = no heartbeat
@@ -113,10 +119,11 @@ unsigned long lastPeriodStart;
 const int onDuration = 1000;
 const int periodDuration = 3000;
 
-int16_t rawADCvalue;  // The is where we store the value we receive from the ADS1115
+int16_t rawADCvalue; // The is where we store the value we receive from the ADS1115
 
-void setup() {
-  Serial.begin (9600);
+void setup()
+{
+  Serial.begin(9600);
 
   measurementAskedFromServer = false;
   measurementAskedFromButton = false;
@@ -139,9 +146,9 @@ void setup() {
 
   ActivateAlarmLight();
 
-   if (communicate)
+  if (communicate)
   {
-    heartBeatStatusId = 2;   //2 = waiting for heartbeat
+    heartBeatStatusId = 2; //2 = waiting for heartbeat
     // start the Ethernet and UDP:
     //Ethernet.begin(myMac, ip);
     Ethernet.begin(myMac);
@@ -149,7 +156,7 @@ void setup() {
   }
   else
   {
-    heartBeatStatusId = -1;   //-1 = disabled
+    heartBeatStatusId = -1; //-1 = disabled
   }
 
   //apparantly this is needed else after the DHCP setup the measurementAskedFromServer variable gets 49, not known why
@@ -174,37 +181,47 @@ void AlarmReset()
   tone(buzzerPin, 1250, 100);
 }
 
-double GetHeightWater(double& volume)
+void StartMeasurement()
 {
-    //TODO : masterdata in Node-Red
-    //int offset = 30;
+  //Serial.println("Activating pump");
+  digitalWrite(PUMP_RELAIS_PIN, LOW);
+  measurementBusy = true;
 
-    //Serial.println("Activating pump");
-    digitalWrite(PUMP_RELAIS_PIN, LOW);
+  measurementStarted = millis();
+}
 
-    delay(pump_delay);
+double StopMeasurement(double &volume)
+{
+  //Serial.println("Deactivating pump");
+  digitalWrite(PUMP_RELAIS_PIN, HIGH);
+  measurementBusy = false;
 
-    //Serial.print("value from ADC : ");
-    //Serial.println(rawADCvalue);
+  delay(2000);
 
-    //Serial.println("Deactivating pump");
-    digitalWrite(PUMP_RELAIS_PIN, HIGH);
+  rawADCvalue = analogRead(A1);
 
-    delay(2000);
+  //rawADCvalue = (rawADCvalue - offset);
 
-    rawADCvalue = analogRead(A1);
+  //5500 = 5.5V = referentievoltage gemeten op huidig gebruikte Arduino
+  //4700 = 4.7V = voltage bij full scale van sensor
+  double f1 = (5500.0 / 1023) * (50.0 / 4700) * (1000.0 / (9.81 * 999.58)) + 0.0; //zonder temperatuurcompensatie want zit eigenlijk al in de sensor
+  double mm = rawADCvalue * f1 * 1000;                                            //mm
 
-   //rawADCvalue = (rawADCvalue - offset);
+  //2* omdat er 2 putten zijn die met een hevel verbonden zijn
+  volume = 2 * (rawADCvalue * f1) * ((3.1415 * 2.35 * 2.35) / 4) * 1000;
 
-   //5500 = 5.5V = referentievoltage gemeten op huidig gebruikte Arduino
-   //4700 = 4.7V = voltage bij full scale van sensor
-    double f1 = (5500.0 / 1023) * (50.0 / 4700) * (1000.0 / (9.81*999.58)) + 0.0;   //zonder temperatuurcompensatie want zit eigenlijk al in de sensor
-    double mm = rawADCvalue * f1 * 1000;   //mm
+  return mm;
+}
 
-    //2* omdat er 2 putten zijn die met een hevel verbonden zijn
-    volume = 2 * (rawADCvalue * f1) * ((3.1415 * 2.35 * 2.35) / 4) * 1000;
+double GetHeightWater(double &volume)
+{
+  //TODO : masterdata in Node-Red
+  //int offset = 30;
 
-    return mm;
+  delay(pump_delay);
+
+  //Serial.print("value from ADC : ");
+  //Serial.println(rawADCvalue);
 }
 
 void ActivateAlarmLight()
@@ -219,7 +236,8 @@ void DeactivateAlarmLight()
   alarmLightIsActive = false;
 }
 
-void loop() {
+void loop()
+{
   if (communicate)
   {
     //while (ether.clientWaitingGw())
@@ -231,15 +249,17 @@ void loop() {
     Serial.println(packetSize);
 
     //if (packetSize)
-    if(Udp.available())
+    if (Udp.available())
     {
       Serial.print("Received packet of size ");
       Serial.println(packetSize);
       Serial.print("From ");
       IPAddress remote = Udp.remoteIP();
-      for (int i = 0; i < 4; i++) {
+      for (int i = 0; i < 4; i++)
+      {
         Serial.print(remote[i], DEC);
-        if (i < 3) {
+        if (i < 3)
+        {
           Serial.print(".");
         }
       }
@@ -254,7 +274,8 @@ void loop() {
       String payload(packetBuffer);
       //Serial.println(payload);
 
-      for(int i=0;i<UDP_TX_PACKET_MAX_SIZE;i++) packetBuffer[i] = 0;
+      for (int i = 0; i < UDP_TX_PACKET_MAX_SIZE; i++)
+        packetBuffer[i] = 0;
 
       if (payload == "heartbeat")
       {
@@ -262,23 +283,27 @@ void loop() {
       }
       else if (payload == "measure")
       {
-        lastHeartbeatReceivedOn = millis();
-        measurementAskedFromServer = true;
-        Serial.println("measure received");
+        if (!measurementBusy)
+        {
+          lastHeartbeatReceivedOn = millis();
+          measurementAskedFromServer = true;
+          Serial.println("measure received");
+        }
       }
       else
       {
         Serial.println(payload);
       }
     }
-
   }
 
-  Serial.println("START LOOP");
+  if (!measurementBusy && (measurementAskedFromServer || measurementAskedFromButton))
+  {
+    StartMeasurement();
+  }
 
-  unsigned long currentMillis = millis();
-  if (measurementAskedFromServer || measurementAskedFromButton) {
-
+  if (measurementBusy && (millis() - measurementStarted) > pump_delay)
+  {
     //Serial.print("measurementAskedFromServer = ");
     //Serial.println(measurementAskedFromServer);
     //Serial.print("measurementAskedFromButton = ");
@@ -288,16 +313,13 @@ void loop() {
 
     //double heightWater;
     double volume;
-    //heightWater = GetHeightWater(volume);
-    GetHeightWater(volume);
-
-    //Serial.println(heightWater);
+    StopMeasurement(volume);
 
     double t1_percentage_full = ((volume / (t1_capacity_with_manhole * 1.0)) * 100);
-    byte t1_percentage_full_rounded = (byte) (t1_percentage_full + 0.5);
+    byte t1_percentage_full_rounded = (byte)(t1_percentage_full + 0.5);
 
     //Check if we have to raise the alarm
-    alarmIsActive = (t1_percentage_full_rounded < lowAlarmLimit) and (currentMillis - lastMillisAlarmAcked > alarmDelay or lastMillisAlarmAcked == 0);
+    alarmIsActive = (t1_percentage_full_rounded < lowAlarmLimit) and (millis() - lastMillisAlarmAcked > alarmDelay or lastMillisAlarmAcked == 0);
 
     //Send the measurement data to the server (for database storage)
     if (communicate)
@@ -330,7 +352,8 @@ void loop() {
   byte resetButtonReading;
   resetButtonReading = digitalRead(alarmResetPin);
 
-  if (resetButtonReading != lastResetButtonState) lastResetButtonDebounceTime = millis();
+  if (resetButtonReading != lastResetButtonState)
+    lastResetButtonDebounceTime = millis();
 
   if ((millis() - lastResetButtonDebounceTime) > debounceDelay)
   {
@@ -338,9 +361,12 @@ void loop() {
     {
       resetButtonState = resetButtonReading;
       //ack alarm
-      if (resetButtonState == HIGH) {
-        if (alarmIsActive) AlarmReset();
-        else measurementAskedFromButton = true;
+      if (resetButtonState == HIGH)
+      {
+        if (alarmIsActive)
+          AlarmReset();
+        else
+          measurementAskedFromButton = true;
       }
     }
   }
@@ -353,15 +379,16 @@ void loop() {
     if (millis() - lastPeriodStart >= periodDuration)
     {
       lastPeriodStart += periodDuration;
-      if (buzzerOnAlarm) tone(buzzerPin, 550, onDuration); // play 550 Hz tone in background for 'onDuration'ms
+      if (buzzerOnAlarm)
+        tone(buzzerPin, 550, onDuration); // play 550 Hz tone in background for 'onDuration'ms
       lastTimeBuzzer = millis();
       ActivateAlarmLight();
     }
-    else if (millis() - lastTimeBuzzer >= onDuration) DeactivateAlarmLight();
+    else if (millis() - lastTimeBuzzer >= onDuration)
+      DeactivateAlarmLight();
   }
-  else DeactivateAlarmLight();
+  else
+    DeactivateAlarmLight();
 
-  Serial.println("END LOOP");
-
-  delay(2000);
+  delay(500);
 }
