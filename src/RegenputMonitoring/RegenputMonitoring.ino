@@ -31,6 +31,7 @@
                                       includes BACKLOG ITEM : [SOFTWARE][HARDWARE]  implement a version with a Arduino UNO by using the Ethershield.h library
                                       includes BACKLOG ITEM : [SOFTWARE]            distance and level calculations are now done in the Arduino and in Node-Red
    V5.1   16/11/2017  Ruben Desmet    remove delay statements to prepare for the Watchdog mechanisme
+   V5.2   27/11/2017  Ruben Desmet    includes BACKLOG ITEM : [SOFTWARE]            reimplement heartBeatStatusId, is not set any more
 
   BACKLOG:
   --------
@@ -52,7 +53,7 @@ char packetBuffer[UDP_TX_PACKET_MAX_SIZE]; //buffer to hold incoming packet
 EthernetUDP Udp;
 
 const bool communicate = true;
-const bool buzzerOnAlarm = false;
+const bool buzzerOnAlarm = true;
 
 // program variables
 bool measurementAskedFromServer = false;
@@ -85,6 +86,7 @@ const byte lowAlarmLimit = 25; //if tank reaches <lowAlarmLimit% then give alarm
 //const byte alarmLightInterval = 1000;
 //TODO : masterdata in Node-RED
 const unsigned long alarmDelay = 3600000; //1h
+unsigned long controllerStarted = 0;
 
 boolean alarmLightIsActive = false;
 unsigned long previousMillisAlarm = 0;
@@ -124,6 +126,8 @@ int16_t rawADCvalue; // The is where we store the value we receive from the ADS1
 void setup()
 {
   Serial.begin(9600);
+
+  controllerStarted = millis();
 
   measurementAskedFromServer = false;
   measurementAskedFromButton = false;
@@ -240,15 +244,20 @@ void loop()
 {
   if (communicate)
   {
-    //while (ether.clientWaitingGw())
-    //ether.packetLoop(ether.packetReceive());
+    bool heartBeatCheckArmed = false;
+    if ((millis() - controllerStarted) > heartBeatDelay) heartBeatCheckArmed = true;
+
+    if (heartBeatCheckArmed)
+    {
+      if ((millis() - lastHeartbeatReceivedOn) < heartBeatDelay) heartBeatStatusId = 1;    //heartbeat is OK
+      else heartBeatStatusId = 0;    //heartbeat is NOT OK
+    }
 
     int packetSize = Udp.parsePacket();
 
     Serial.print("packetsize = ");
     Serial.println(packetSize);
 
-    //if (packetSize)
     if (Udp.available())
     {
       Serial.print("Received packet of size ");
