@@ -32,6 +32,7 @@
                                       includes BACKLOG ITEM : [SOFTWARE]            distance and level calculations are now done in the Arduino and in Node-Red
    V5.1   16/11/2017  Ruben Desmet    remove delay statements to prepare for the Watchdog mechanisme
    V5.2   27/11/2017  Ruben Desmet    includes BACKLOG ITEM : [SOFTWARE]            reimplement heartBeatStatusId, is not set any more
+   V5.2.1 12/12/2017  Ruben Desmet    implemented extra logging
 
   BACKLOG:
   --------
@@ -44,7 +45,9 @@
                             that is calculated in Node-Red so that the Arduino doesn't need to calculate any more.
 */
 
-//IPAddress ip(192, 168, 1, 133);
+ char udpServer[] = "192.168.1.130";
+ char udpServerPort[] = "8888";
+
 static byte myMac[] = {0x74, 0x54, 0x69, 0x2D, 0x30, 0x31};
 unsigned int localPort = 8890; // local port to listen on
 // buffers for receiving and sending data
@@ -217,17 +220,6 @@ double StopMeasurement(double &volume)
   return mm;
 }
 
-double GetHeightWater(double &volume)
-{
-  //TODO : masterdata in Node-Red
-  //int offset = 30;
-
-  delay(pump_delay);
-
-  //Serial.print("value from ADC : ");
-  //Serial.println(rawADCvalue);
-}
-
 void ActivateAlarmLight()
 {
   digitalWrite(alarmLightPin, LOW);
@@ -238,6 +230,20 @@ void DeactivateAlarmLight()
 {
   digitalWrite(alarmLightPin, HIGH);
   alarmLightIsActive = false;
+}
+
+void WriteToLog(char level[], char msg[40])
+{
+  char logmsg[40];
+  sprintf(logmsg,"%l;%m",level,msg);
+  WriteToUDPServer(logmsg);
+}
+
+void WriteToUDPServer(char msg[40])
+{
+  Udp.beginPacket(udpServer, udpServerPort);
+  Udp.write(msg);
+  Udp.endPacket();
 }
 
 void loop()
@@ -289,12 +295,12 @@ void loop()
       if (payload == "heartbeat")
       {
         lastHeartbeatReceivedOn = millis();
+        WriteToLog("silly","'heartbeat' received");
       }
       else if (payload == "measure")
       {
         if (!measurementBusy)
         {
-          lastHeartbeatReceivedOn = millis();
           measurementAskedFromServer = true;
           Serial.println("measure received");
         }
@@ -345,10 +351,11 @@ void loop()
 
       //ether.sendUdp(msg, sizeof msg, listenPort, UDPDataCollectorIp, 8888);
       // send a reply to the IP address and port that sent us the packet we received
-      //Udp.beginPacket(Udp.remoteIP(), 8888);
-      Udp.beginPacket("192.168.1.130", 8888);
-      Udp.write(msg);
-      Udp.endPacket();
+      // Udp.beginPacket(udpServer, udpServerPort);
+      // Udp.write(msg);
+      // Udp.endPacket();
+
+      WriteToUDPServer(msg);
     }
 
     measurementAskedFromButton = false;
